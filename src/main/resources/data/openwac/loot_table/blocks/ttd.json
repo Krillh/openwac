@@ -1,0 +1,17 @@
+{
+  "type":"minecraft:block",
+  "pools":[{"rolls":1,"condition":{"type":"minecraft:survives_explosion"},
+    "entries":[{"type":"minecraft:item","name":"openwac:ttd"}],
+    "modifier":{
+      "type":"minecraft:copy_custom_data","source":"block_entity","ops":[
+        {"source":"DeviceId","target":"DeviceId","op":"replace"},
+        {"source":"Cells","target":"Cells","op":"replace"},
+        {"source":"Revision","target":"Revision","op":"replace"},
+        {"source":"CursorX","target":"CursorX","op":"replace"},
+        {"source":"CursorY","target":"CursorY","op":"replace"},
+        {"source":"CursorVisible","target":"CursorVisible","op":"replace"},
+        {"source":"CursorBlink","target":"CursorBlink","op":"replace"}
+      ]
+    }
+  }]
+}

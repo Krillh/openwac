@@ -1,0 +1,1 @@
+{"type":"minecraft:block","pools":[{"rolls":1,"condition":{"type":"minecraft:survives_explosion"},"entries":[{"type":"minecraft:item","name":"openwac:keyboard"}],"modifier":{"type":"minecraft:copy_custom_data","source":"block_entity","ops":[{"source":"DeviceId","target":"DeviceId","op":"replace"}]}}]}

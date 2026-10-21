@@ -1,0 +1,46 @@
+# Gradle caches and build output
+.gradle/
+.gradle-user/
+build/
+out/
+bin/
+
+# Local Maven repository created by the publishing configuration
+/repo/
+
+# Minecraft development instances (worlds, configs, logs, mods, and disk images)
+/run/
+/runs/
+/run-data/
+/logs/
+/crash-reports/
+.mixin.out/
+
+# Data generator bookkeeping; keep the generated assets and data themselves
+/src/generated/resources/.cache/
+
+# IntelliJ IDEA, Eclipse, and VS Code local project files
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+.vscode/
+
+# JVM crash reports and heap dumps
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+
+# Editor backups and OS metadata
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Keep gradlew, gradlew.bat, gradle/wrapper/ (including its JAR),
+# gradle.properties, mod resources, and bundled .wasm firmware in version control.

@@ -1,0 +1,1 @@
+{"variants":{"facing=north":{"model":"openwac:block/keyboard"},"facing=east":{"model":"openwac:block/keyboard","y":90},"facing=south":{"model":"openwac:block/keyboard","y":180},"facing=west":{"model":"openwac:block/keyboard","y":270}}}

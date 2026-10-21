@@ -1,0 +1,1 @@
+{"variants":{"facing=north":{"model":"openwac:block/ttd"},"facing=east":{"model":"openwac:block/ttd","y":90},"facing=south":{"model":"openwac:block/ttd","y":180},"facing=west":{"model":"openwac:block/ttd","y":270}}}

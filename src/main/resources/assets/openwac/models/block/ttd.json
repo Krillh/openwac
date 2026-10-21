@@ -1,0 +1,11 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {"body":"minecraft:block/iron_block","screen":"minecraft:block/black_concrete","particle":"minecraft:block/iron_block"},
+  "elements": [
+    {"from":[0,0,0],"to":[16,16,16],"faces":{
+      "north":{"texture":"#body","cullface":"north"},"south":{"texture":"#body","cullface":"south"},
+      "east":{"texture":"#body","cullface":"east"},"west":{"texture":"#body","cullface":"west"},
+      "up":{"texture":"#body","cullface":"up"},"down":{"texture":"#body","cullface":"down"}}},
+    {"from":[1,1,-0.005],"to":[15,15,0],"faces":{"north":{"texture":"#screen","uv":[0,0,16,16]}}}
+  ]
+}
