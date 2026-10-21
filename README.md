@@ -19,3 +19,15 @@ I'll admit in my short anecdotal testing, it's not as fast as Lua (yet). The
 mod is still in its first working version.
 
 For specific information, refer to the `docs` folder.
+
+OpenWAC comes with a default operating system: OpenWAC-OS. That, however, will
+be in a separate repository with its own release timeline, unrelated to the
+mod except when the mod creates breaking changes.
+
+And because developing is tedious if you have to do it through MC all the time,
+there will also be an OpenWAC-SIM repository where you can more easily develop
+those pesky bootloaders and kernels without stepping through the mod code. That
+repo will release with matching major and minor version numbers as this mod for
+compatible simulator-mod parings.
+
+NOTE: As of this commit, neither of those are published yet.
