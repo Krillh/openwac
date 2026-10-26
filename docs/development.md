@@ -22,6 +22,7 @@ On Windows:
 .\gradlew.bat verifyRuntime --args=--disks-only
 .\gradlew.bat verifyRuntime --args=--kernel-reports-only
 .\gradlew.bat verifyRuntime --args=--crash-reports-only
+.\gradlew.bat verifyRuntime --args=--boot-handoff-only
 ```
 
 Use `runClient` for manual in-game checks. `verifyRuntime` compiles and runs
@@ -33,12 +34,10 @@ and fuel accounting, Chicory memory/kernel behavior, device dispatch, TTD,
 metrics, firmware deduplication, continuations and preemption, hostile modules
 and pointers, cold boot, disk behavior, and the shipped disk self-test firmware.
 
-The full suite currently has a stale dependency: `KernelChecks.bootloader()`
-reads `docs/bootloader.wasm` before comparing it with the bundled resource.
-That documentation path is no longer a supported artifact location, so the
-full suite fails there in the current checkout. The check needs to validate
-the bundled resource directly; restoring a bootloader binary under `docs/`
-is not part of the setup. The focused checks above bypass that dependency.
+The bootloader check loads the bundled resource directly; no bootloader binary
+under `docs/` is required. `--boot-handoff-only` checks that bootloader exit
+precedes kernel initialization and child process creation, including failure
+and cancellation paths.
 
 Manual play checks are still needed for Minecraft integration: case inventory
 and power flow, client screens and rendering, nearby chat and packet behavior,

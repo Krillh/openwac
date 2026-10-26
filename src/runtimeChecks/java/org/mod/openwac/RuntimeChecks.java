@@ -23,6 +23,11 @@ public final class RuntimeChecks {
     private static final byte[] HEADER = {0, 97, 115, 109, 1, 0, 0, 0};
     private static final EngineLimits LIMITS = new EngineLimits(1024 * 1024, 8 * 1024 * 1024, 256);
     public static void main(String[] args) throws Exception {
+        if (args.length == 1 && args[0].equals("--boot-handoff-only")) {
+            org.mod.openwac.runtime.chicory.KernelChecks.bootHandoffChecks();
+            System.out.println("OpenWAC boot handoff checks passed");
+            return;
+        }
         if (args.length == 1 && args[0].equals("--disks-only")) {
             DiskChecks.run();
             System.out.println("OpenWAC disk checks passed");

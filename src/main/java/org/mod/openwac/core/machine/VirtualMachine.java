@@ -72,7 +72,7 @@ public final class VirtualMachine {
                         .filter(d -> d instanceof BiosEeprom && (bootMedia == null || d.id().equals(bootMedia)))
                         .map(d -> (BiosEeprom) d).findFirst().orElseThrow(() -> new IllegalStateException("No BIOS EEPROM installed"));
                 bootFirmware = bios.snapshot().metadata().getOrDefault("firmware", "unknown");
-                bootProcessId = processes.spawn(bios.bootloader(), true, factory);
+                bootProcessId = processes.spawnBoot(bios.bootloader(), factory);
                 if (bootProcessId == 0) throw new IllegalStateException("Cannot start BIOS process");
                 markRunning();
             }

@@ -17,7 +17,7 @@ import java.util.function.Consumer;
 final class ChicoryComputer implements WasmComputer {
     private static final int KERNEL_INPUT_CAPACITY = 256 * 1024;
     private static final int KERNEL_OUTPUT_CAPACITY = 16 * 1024;
-    private enum State { EMPTY, INSTALLING, READY, PANICKED, CLOSED }
+    private enum State { EMPTY, PENDING, INSTALLING, READY, PANICKED, CLOSED }
     private record Exit(long id, int reason) {}
     private static final ThreadPoolExecutor COMPILERS = new ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS,
             new ArrayBlockingQueue<>(16), task -> Thread.ofPlatform().daemon().name("openwac-kernel-compiler").unstarted(task));
@@ -32,6 +32,10 @@ final class ChicoryComputer implements WasmComputer {
     private final ArrayDeque<Runnable> commands = new ArrayDeque<>();
     private State state = State.EMPTY;
     private ChicoryProcess owner, installer;
+    private long bootId, deferredInstallerId;
+    private byte[] deferredKernel;
+    private ChicoryProcess bootInstallation;
+    private boolean bootInstallationFailed;
     private Future<ChicoryEngine.ParsedModule> compilation;
     private Instance kernel;
     private BudgetedMemory kernelMemory;
@@ -101,7 +105,9 @@ final class ChicoryComputer implements WasmComputer {
                 requireType("kernel_get_io_buffers", List.of(), List.of(ValType.I32));
                 requireType("kernel_syscall", List.of(ValType.I64, ValType.I32, ValType.I32, ValType.I32, ValType.I32), List.of(ValType.I32));
                 phase = "Kernel initialization";
-                if (hasType("kernel_init", List.of(), List.of())) kernel.export("kernel_init").apply();
+                boolean deferInitialization;
+                synchronized (this) { deferInitialization = bootId != 0; }
+                if (!deferInitialization && hasType("kernel_init", List.of(), List.of())) kernel.export("kernel_init").apply();
                 prepareIoBuffers = hasType("kernel_prepare_io_buffers", List.of(ValType.I32, ValType.I32), List.of(ValType.I32));
                 phase = "Kernel I/O descriptor validation";
                 readIoBuffers(memory);
@@ -110,7 +116,12 @@ final class ChicoryComputer implements WasmComputer {
                 exitHook = hasType("kernel_process_exited", List.of(ValType.I64, ValType.I32), List.of());
                 synchronized (this) {
                     if (state != State.INSTALLING) return -16;
-                    state = State.READY; success = true; kernelFailure = null;
+                    if (deferInitialization) {
+                        deferredKernel = wasm.clone();
+                        deferredInstallerId = caller.id;
+                        state = State.PENDING;
+                    } else state = State.READY;
+                    success = true; kernelFailure = null;
                 }
                 return 0;
             }
@@ -261,13 +272,78 @@ final class ChicoryComputer implements WasmComputer {
     @Override public synchronized boolean canSpawn(int pending) {
         return state != State.CLOSED && exits.size() + pending < processLimit;
     }
+    @Override public synchronized void bootStarted(long id) { bootId = id; }
+    @Override public synchronized void bootExited(long id, int reason) {
+        bootId = 0;
+        if (reason != 0 && state == State.PENDING) {
+            deferredKernel = null; state = State.EMPTY; disposeMemory();
+        }
+    }
+    @Override public synchronized boolean canStartProcesses() {
+        return deferredKernel == null && bootInstallation == null && !bootInstallationFailed;
+    }
+    @Override public synchronized long maintenanceProcessId() { return bootInstallationFailed ? deferredInstallerId : 0; }
     @Override public synchronized void exited(long id, int reason) {
         if (state != State.READY || !exitHook) return;
         if (exits.size() >= processLimit) { panic("Kernel exit notification queue overflow"); return; }
         exits.addLast(new Exit(id, reason));
     }
-    @Override public synchronized boolean hasWork() { return !commands.isEmpty() || (state == State.READY && owner == null && !exits.isEmpty()); }
+    @Override public synchronized boolean hasWork() {
+        return (bootId == 0 && deferredKernel != null) || bootInstallation != null
+                || !commands.isEmpty() || (state == State.READY && owner == null && !exits.isEmpty());
+    }
     @Override public WasmProcess.Step maintenance(long fuel) {
+        ChicoryProcess installation;
+        synchronized (this) {
+            if (bootId == 0 && deferredKernel != null && bootInstallation == null) {
+                byte[] wasm = deferredKernel;
+                bootInstallation = new ChicoryProcess(deferredInstallerId, true, this, limits.fuelPerTurn(), false, process -> {
+                    synchronized (this) { state = State.INSTALLING; installer = process; }
+                    boolean success = false;
+                    String phase = "Kernel initialization";
+                    try {
+                        if (!acquire(process, true)) throw new IllegalStateException("Kernel initialization unavailable");
+                        if (hasType("kernel_init", List.of(), List.of())) kernel.export("kernel_init").apply();
+                        phase = "Kernel I/O descriptor validation";
+                        readIoBuffers(kernel.exports().memory("memory"));
+                        preparedInputCapacity = Math.min(inputCapacity, KERNEL_INPUT_CAPACITY);
+                        preparedOutputCapacity = Math.min(outputCapacity, KERNEL_OUTPUT_CAPACITY);
+                        synchronized (this) {
+                            if (state != State.INSTALLING) throw new IllegalStateException("Kernel initialization cancelled");
+                            state = State.READY; success = true;
+                        }
+                    } catch (ChicoryProcess.Restart restart) { throw restart; }
+                    catch (CancellationException cancelled) { throw cancelled; }
+                    catch (Exception | StackOverflowError failure) {
+                        installationFailed(wasm, process, phase, failure);
+                        throw failure;
+                    } finally {
+                        synchronized (this) {
+                            if (installer == process) installer = null;
+                            if (!success) {
+                                if (state == State.INSTALLING) state = State.EMPTY;
+                                disposeMemory();
+                            }
+                        }
+                        release(process);
+                    }
+                });
+                deferredKernel = null;
+            }
+            installation = bootInstallation;
+        }
+        if (installation != null) {
+            var step = installation.runQuantum(Math.min(fuel, limits.fuelPerTurn()));
+            if (step.reason() == WasmProcess.Reason.EXITED || step.reason() == WasmProcess.Reason.TRAPPED
+                    || step.reason() == WasmProcess.Reason.KILLED) {
+                installation.close();
+                synchronized (this) {
+                    bootInstallation = null;
+                    bootInstallationFailed = step.reason() != WasmProcess.Reason.EXITED;
+                }
+            }
+            return step;
+        }
         Exit exit;
         synchronized (this) {
             if (state != State.READY || owner != null || exits.isEmpty()) return new WasmProcess.Step(0, WasmProcess.Reason.EXITED, null);
@@ -289,6 +365,8 @@ final class ChicoryComputer implements WasmComputer {
     }
     @Override public synchronized void close() {
         state = State.CLOSED;
+        deferredKernel = null; bootId = 0;
+        if (bootInstallation != null) { bootInstallation.close(); bootInstallation = null; }
         if (compilation != null) compilation.cancel(true);
         compilation = null; installer = null; exits.clear(); commands.clear(); waiters.clear(); blocked.clear();
         if (owner != null) owner.close(); else disposeMemory();

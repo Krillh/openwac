@@ -8,7 +8,6 @@ import org.mod.openwac.runtime.*;
 import org.mod.openwac.runtime.hal.HostServices;
 import java.io.*;
 import java.nio.*;
-import java.nio.file.*;
 import java.util.*;
 import java.util.function.BooleanSupplier;
 
@@ -17,7 +16,92 @@ public final class KernelChecks {
     private static final int I32 = 0x7f, I64 = 0x7e;
     private static final String INSTALL = "hal_install_kernel";
     public static void run() throws Exception {
-        installationAndCalls(); blockingAndWake(); contentionAndKills(); exitReasons(); panicAndHooks(); invalidInstallations(); bootloader();
+        bootHandoffChecks(); installationAndCalls(); blockingAndWake(); contentionAndKills(); exitReasons(); panicAndHooks(); invalidInstallations(); bootloader();
+    }
+    public static void bootHandoffChecks() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.manager.spawnBoot(bootHandoffModule(kernel(0), false), f::create);
+            f.until(() -> f.manager.size() == 3);
+            require(f.created.size() == 1 && f.budget.usedPages() == 2,
+                    "Kernel installs during boot while children and kernel initialization wait");
+            f.until(() -> f.budget.usedPages() == 1);
+            require(f.created.size() == 1, "Bootloader memory must be released before kernel initialization or children start");
+            f.until(() -> f.manager.size() == 0 && !f.computer.hasWork());
+            f.noFailures();
+            require(f.created.size() == 3 && f.budget.usedPages() == 1,
+                    "Both privilege tiers must start after deferred kernel initialization");
+            require(f.reports.drain().isEmpty(), "Successful boot handoff must not report errors");
+        }
+        try (Fixture f = new Fixture()) {
+            long boot = f.manager.spawnBoot(bootHandoffModule(kernel(0), true), f::create);
+            f.until(() -> f.manager.size() == 0 && !f.computer.hasWork());
+            require(f.failures.size() == 1 && f.failures.getFirst().processId() == boot && f.created.size() == 1,
+                    "Bootloader trap must discard deferred children and kernel");
+            require(f.reports.drain().isEmpty(), "Discarded kernel must not run initialization or report initialization failures");
+        }
+        try (Fixture f = new Fixture()) {
+            long boot = f.manager.spawnBoot(bootHandoffModule(kernel(3), false), f::create);
+            f.until(() -> !f.failures.isEmpty());
+            require(f.failures.getFirst().processId() == boot && f.created.size() == 1 && f.manager.size() == 0,
+                    "Deferred installation failure must fail boot before any child is created");
+            require(f.reports.drain().size() == 1, "Deferred installation failure must retain kernel diagnostics");
+        }
+        try (Fixture f = new Fixture()) {
+            f.manager.spawnBoot(bootHandoffModule(kernel(0), false), f::create);
+            f.until(() -> f.manager.size() == 3);
+            require(f.manager.wake(2) && f.manager.queueKill(2), "Deferred children retain valid process IDs");
+            f.until(() -> f.manager.size() == 0 && !f.computer.hasWork());
+            f.noFailures();
+            require(!f.created.containsKey(2L) && f.created.containsKey(3L),
+                    "Killed deferred children must never instantiate, while other children still start");
+        }
+        for (byte[] malformed : List.of(new byte[] {1,2,3,4,5,6,7,8}, kernel(2), kernel(12), kernel(13), kernel(1))) {
+            try (Fixture f = new Fixture()) {
+                f.manager.spawnBoot(bootHandoffModule(kernel(0), false, malformed), f::create);
+                f.until(() -> f.manager.size() == 3);
+                f.noFailures();
+                require(f.reports.drain().size() == 1 && f.created.size() == 1,
+                        "Bootloader must receive malformed-kernel errors and successfully retry before exiting");
+                f.until(() -> f.manager.size() == 0 && !f.computer.hasWork());
+                f.noFailures();
+                require(f.created.size() == 3, "Replacement kernel must initialize and serve queued children");
+            }
+        }
+        try (Fixture f = new Fixture()) {
+            Code wait = new Code();
+            for (int i = 0; i < 100; i++) wait.call(0);
+            f.manager.spawnBoot(caller(wait), f::create);
+            f.spawn(caller(new Code()), false);
+            f.tick();
+            require(f.created.size() == 1, "Spawn gating must also work without a kernel request");
+            f.until(() -> f.manager.size() == 0);
+            f.noFailures();
+            require(f.created.size() == 2, "Children must start after bootloader exit without a kernel");
+        }
+    }
+    private static byte[] bootHandoffModule(byte[] kernel, boolean trap) {
+        return bootHandoffModule(kernel, trap, null);
+    }
+    private static byte[] bootHandoffModule(byte[] kernel, boolean trap, byte[] malformed) {
+        Module m = guest(true);
+        m.imp("hal", "hal_spawn_process", m.type(new int[] {I32,I32}, new int[] {I64}));
+        m.imp("hal", "hal_spawn_process_privileged", m.type(new int[] {I32,I32}, new int[] {I64}));
+        byte[] child = caller(new Code().sys(0, 1));
+        m.data(1024, kernel); m.data(4096, child);
+        Code code = new Code();
+        if (malformed != null) {
+            m.data(8192, malformed);
+            code.i(8192).i(malformed.length).call(0).eq(-16);
+        }
+        code.i(1024).i(kernel.length).call(0).eq(0)
+                .i(1024).i(kernel.length).call(0).eq(-15)
+                .sys(0, -13)
+                .i(4096).i(child.length).call(2).op(0xa7).eq(2)
+                .i(4096).i(child.length).call(3).op(0xa7).eq(3);
+        for (int i = 0; i < 300; i++) code.i(0).op(0x1a);
+        if (trap) code.op(0);
+        m.function(m.type(new int[0], new int[0]), code, "_start");
+        return m.build();
     }
     public static void reportChecks() throws Exception {
         for (int mode : new int[] {1,2,3,8,9,10,12,13,14}) {
@@ -84,7 +168,12 @@ public final class KernelChecks {
     }
     private static void runtimeReportDelivery() throws Exception {
         for(boolean keepRunning:new boolean[]{false,true}) {
-            byte[] wasm=installer(kernel(3),-16,keepRunning?new Code().op(0x03,0x40,0x0c,0,0x0b):new Code());
+            byte[] child=installer(kernel(3),-16,keepRunning?new Code().op(0x03,0x40,0x0c,0,0x0b):new Code());
+            Module boot = guest(false);
+            boot.imp("hal", "hal_spawn_process_privileged", boot.type(new int[] {I32,I32}, new int[] {I64}));
+            boot.data(1024, child);
+            boot.function(boot.type(new int[0], new int[0]), new Code().i(1024).i(child.length).call(2).op(0x1a), "_start");
+            byte[] wasm = boot.build();
             var firmware=new org.mod.openwac.core.firmware.FirmwareRepository() {
                 @Override public byte[] load(String ref){return wasm.clone();}
                 @Override public String install(byte[]bytes){throw new UnsupportedOperationException();}
@@ -245,12 +334,10 @@ public final class KernelChecks {
         await(() -> f.budget.usedPages() == 0, "Shutdown during compilation must release guest and kernel pages");
     }
     private static void bootloader() throws Exception {
-        byte[] source = Files.readAllBytes(Path.of("docs/bootloader.wasm"));
         byte[] bundled;
         try (var stream = KernelChecks.class.getResourceAsStream("/data/openwac/firmware/bootloader-v1.wasm")) {
             require(stream != null, "Bootloader resource must be bundled"); bundled = stream.readAllBytes();
         }
-        require(Arrays.equals(source, bundled), "Bundled bootloader must exactly match supplied binary");
         try (Fixture f = new Fixture()) {
             f.spawn(bundled, true);
             // With no disks this bootloader draws/retries or exits; it must link all imports.
@@ -285,9 +372,10 @@ public final class KernelChecks {
             manager.lifecycle(computer);
         }
         long spawn(byte[] wasm, boolean privileged) {
-            return manager.spawn(wasm, privileged, (id, bytes, tier) -> {
-                var process = computer.createProcess(id, bytes, tier); created.put(id, process); return process;
-            });
+            return manager.spawn(wasm, privileged, this::create);
+        }
+        WasmProcess create(long id, byte[] bytes, boolean privileged) {
+            var process = computer.createProcess(id, bytes, privileged); created.put(id, process); return process;
         }
         ProcessManager.TickResult tick() {
             last = manager.runTick(64, 8); failures.addAll(last.failures());

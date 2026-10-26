@@ -13,6 +13,10 @@ public final class ProcessManager implements AutoCloseable {
         default void exited(long id, int reason) {}
         default void drainCommands() {}
         default boolean canSpawn(int pending) { return true; }
+        default void bootStarted(long id) {}
+        default void bootExited(long id, int reason) {}
+        default boolean canStartProcesses() { return true; }
+        default long maintenanceProcessId() { return 0; }
         default boolean hasWork() { return false; }
         default WasmProcess.Step maintenance(long fuel) { return new WasmProcess.Step(0, WasmProcess.Reason.EXITED, null); }
     }
@@ -26,12 +30,20 @@ public final class ProcessManager implements AutoCloseable {
     private Lifecycle lifecycle = new Lifecycle() {};
     private final int limit;
     private long nextId = 1;
+    private long bootId;
 
     public ProcessManager(int limit) {
         if (limit < 1 || limit > 256) throw new IllegalArgumentException("Invalid process limit");
         this.limit = limit;
     }
     public void lifecycle(Lifecycle value) { lifecycle = Objects.requireNonNull(value); }
+    /** The BIOS runs alone until it exits; other spawn requests retain their allocated IDs. */
+    public long spawnBoot(byte[] wasm, ProcessFactory factory) {
+        if (size() != 0 || bootId != 0) throw new IllegalStateException("Computer already has processes");
+        long id = spawn(wasm, true, factory);
+        if (id != 0) { bootId = id; lifecycle.bootStarted(id); }
+        return id;
+    }
     public long spawn(byte[] wasm, boolean privileged, ProcessFactory factory) {
         if (wasm == null || wasm.length < 8 || wasm.length > 1024 * 1024 || size() >= limit
                 || !lifecycle.canSpawn(pendingSpawns.size()) || nextId <= 0) return 0;
@@ -55,8 +67,15 @@ public final class ProcessManager implements AutoCloseable {
     }
     private void applyPending(List<Failure> failures) {
         lifecycle.drainCommands();
-        while (!pendingSpawns.isEmpty()) {
+        while (!pendingSpawns.isEmpty()
+                && (bootId != 0 ? pendingSpawns.getFirst().id() == bootId : lifecycle.canStartProcesses())) {
             Spawn request = pendingSpawns.removeFirst();
+            if (pendingKills.remove(request.id())) {
+                pendingWakes.remove(request.id());
+                lifecycle.exited(request.id(), 2);
+                finishBoot(request.id(), 2);
+                continue;
+            }
             try {
                 WasmProcess process = Objects.requireNonNull(request.factory().create(request.id(), request.wasm(), request.privileged()));
                 processes.put(request.id(), process);
@@ -68,9 +87,16 @@ public final class ProcessManager implements AutoCloseable {
                 var details = FailureDetails.capture("Process creation", failure);
                 failures.add(new Failure(request.id(), details.summary(), details));
                 lifecycle.exited(request.id(), 1);
+                finishBoot(request.id(), 1);
             }
         }
         for (long id : List.copyOf(pendingKills)) {
+            Spawn pending = pendingSpawns.stream().filter(spawn -> spawn.id() == id).findFirst().orElse(null);
+            if (pending != null) {
+                pendingSpawns.remove(pending); pendingKills.remove(id); pendingWakes.remove(id);
+                lifecycle.exited(id, 2);
+                continue;
+            }
             WasmProcess process = processes.get(id);
             if (process == null || !process.inKernel()) {
                 pendingKills.remove(id);
@@ -92,6 +118,10 @@ public final class ProcessManager implements AutoCloseable {
             if (step.fuelUsed() > remaining) throw new IllegalStateException("Maintenance exceeded tick fuel");
             remaining -= Math.max(1, step.fuelUsed());
             turns++;
+            if (step.reason() == WasmProcess.Reason.TRAPPED && lifecycle.maintenanceProcessId() != 0) {
+                failures.add(new Failure(lifecycle.maintenanceProcessId(), Objects.toString(step.diagnostic(), "Maintenance failed")));
+                pendingSpawns.clear(); pendingWakes.clear();
+            }
             applyPending(failures);
         }
         while (remaining > 0 && !ready.isEmpty()) {
@@ -149,6 +179,13 @@ public final class ProcessManager implements AutoCloseable {
         ready.remove(id); waiting.remove(id); privileges.remove(id); pendingWakes.remove(id);
         WasmProcess process = processes.remove(id);
         if (process != null) { process.close(); lifecycle.exited(id, reason); }
+        finishBoot(id, reason);
+    }
+    private void finishBoot(long id, int reason) {
+        if (bootId == 0 || id != bootId) return;
+        bootId = 0;
+        if (reason != 0) { pendingSpawns.clear(); pendingWakes.clear(); }
+        lifecycle.bootExited(id, reason);
     }
     public boolean hasMaintenance() { return lifecycle.hasWork(); }
     public int size() { return processes.size() + pendingSpawns.size(); }
@@ -156,5 +193,6 @@ public final class ProcessManager implements AutoCloseable {
         processes.values().forEach(WasmProcess::close);
         processes.clear(); privileges.clear(); waiting.clear(); ready.clear();
         pendingSpawns.clear(); pendingKills.clear(); pendingWakes.clear();
+        if (bootId != 0) finishBoot(bootId, 2);
     }
 }

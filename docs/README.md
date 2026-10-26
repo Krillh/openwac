@@ -50,4 +50,4 @@ Archived references to disk root flags, IS_ROOT/SET_ROOT operations, and `.disk.
 
 ## Firmware and diagnostics
 
-The [firmware directory](firmware/) contains the mod's diagnostic firmware sources and diagnostic recipes. OpenWACOS bootloader source and builds belong in the separate OpenWACOS repository; the mod consumes its bundled resource, not a file under `docs/`. See [Development](development.md) for diagnostic build inputs, bundled artifact integration, and the current verification limitation, and [User guide](user-guide.md) for player-facing setup and recovery.
+The [firmware directory](firmware/) contains the mod's diagnostic firmware sources and diagnostic recipes. OpenWACOS bootloader source and builds belong in the separate OpenWACOS repository; the mod consumes its bundled resource, not a file under `docs/`. See [Development](development.md) for diagnostic build inputs, bundled artifact integration, and verification commands, and [User guide](user-guide.md) for player-facing setup and recovery.

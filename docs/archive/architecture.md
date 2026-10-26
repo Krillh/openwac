@@ -443,7 +443,7 @@ requires updating `../../src/main/resources/data/openwac/firmware/bootloader-v1.
 Bootloader source and builds belong in the separate OpenWACOS repository.
 Any bootloader binary retained in this archive is historical material, not a
 build or verification input. See the current [development guide](../development.md)
-for artifact integration and the stale verification-path dependency.
+for artifact integration and verification commands.
 
 `WasmComputer` is the loader-independent session boundary. The Chicory
 implementation owns one passive kernel instance, shared memory accounting,

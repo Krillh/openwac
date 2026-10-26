@@ -6,7 +6,20 @@ For guest kernel developers: this page defines the Java runtime's kernel bridge.
 
 A privileged process installs the kernel through `hal_install_kernel(i32 wasm_ptr, i32 wasm_len) -> i32`. The byte range must be valid and contain 8 bytes to 1 MiB. The host copies the bytes and charges `8 + ceil(wasm_len / 16384)` fuel before submitting compilation. A missing computer returns `-16`. Only one installation attempt can be active or succeed: once installation has begun, another attempt, including after a successful install or kernel panic, returns `-15`.
 
-Compilation runs on a bounded compiler executor. The installer parks until at least the next simulation tick and remains parked if compilation is still running. The compiled module is instantiated in its own Wasm store and memory. Its initialization and descriptor checks run as the installer's metered execution and may continue across fuel grants. A failed attempt returns `-16`, records installation failure diagnostics, releases kernel memory, and permits retry. The host does not accept replacement after installation succeeds.
+During bootloader execution, compilation, instantiation, required-export
+checks, and initial descriptor validation complete inside the install call.
+Failures return `-16` and permit retry, allowing the bootloader to react to
+malformed images. Success returns `0` with an installed kernel whose
+`kernel_init` has not run. Kernel memory is already allocated and shares the
+machine budget with the bootloader. Initialization waits until the bootloader
+returns from `_start` successfully and releases its memory. Syscalls return
+`-13` during this interval. Queued processes wait for initialization and
+descriptor revalidation. Bootloader failure discards queued children and
+releases the kernel. Deferred initialization failure reports diagnostics and
+fails boot before children are created. Initialization uses a metered
+maintenance continuation with the bootloader's process ID for diagnostics.
+
+Compilation runs on a bounded compiler executor. The installer parks until at least the next simulation tick and remains parked if compilation is still running. The compiled module is instantiated in its own Wasm store and memory. Descriptor checks run as metered execution and may continue across fuel grants. For installation after boot, initialization also runs in the installer's continuation before the call returns. Failed installation returns `-16`, records diagnostics, releases kernel memory, and permits retry. The host does not accept replacement after installation succeeds.
 
 Installation requires an exported linear memory named `memory` and these exact function signatures:
 
@@ -14,11 +27,11 @@ Installation requires an exported linear memory named `memory` and these exact f
 | --- | --- | --- |
 | `kernel_get_io_buffers` | `() -> i32` | Required; returns descriptor address. |
 | `kernel_syscall` | `(i64, i32, i32, i32, i32) -> i32` | Required; handles a request. |
-| `kernel_init` | `() -> ()` | Optional; called once during installation if present with this type. |
+| `kernel_init` | `() -> ()` | Optional; called once if present with this type, after bootloader exit for installation during boot. |
 | `kernel_prepare_io_buffers` | `(i32, i32) -> i32` | Optional; enables on-demand buffer growth. |
 | `kernel_process_exited` | `(i64, i32) -> ()` | Optional; receives queued process exits. |
 
-A missing or incorrectly typed required export, a trap during initialization, or an invalid initial descriptor fails installation with `-16`. Optional exports are recognized only when their type matches; absent or wrong-typed optional exports are treated as unavailable. Kernel memory is charged to the runtime's allocated-page budgets, including successful growth; see [architecture](architecture.md) for memory accounting.
+A missing or incorrectly typed required export or an invalid initial descriptor fails installation with `-16`. Initialization traps return `-16` for installation after boot; deferred initialization traps fail boot. Optional exports are recognized only when their type matches; absent or wrong-typed optional exports are treated as unavailable. Kernel memory is charged to the runtime's allocated-page budgets, including successful growth; see [architecture](architecture.md) for memory accounting.
 
 `kernel_get_io_buffers` returns the address of a 16-byte descriptor in kernel memory. It contains four little-endian `u32` values in this order: input pointer, input capacity, output pointer, output capacity. The descriptor and both complete ranges must fit in kernel memory. The host does not check that input and output ranges are disjoint, so a kernel must keep them separate if it needs to preserve request bytes while producing a response.
 

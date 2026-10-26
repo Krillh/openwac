@@ -75,6 +75,11 @@ Charges one fuel unit. An unprivileged caller receives `-1` and continues. A pri
 
 Pass compiled Wasm bytes, not WAT text. A valid request allocates an ID and queues process creation; it does not mean compilation or startup succeeded, and the child is not run immediately. The process starts through the runtime's normal process entry point. The first function is available to privileged callers and creates an unprivileged process; the second creates a privileged process. Both binaries must be 8 bytes through 1 MiB and fit in caller memory. Charge is `8 + ceil(wasm_len / 16,384)` fuel units. Returns `0` for invalid size/range, process-limit exhaustion, or inability to queue; a positive value is the allocated process ID. Creation failures occur asynchronously and are reported by runtime lifecycle handling.
 
+During boot, both spawn operations queue work until the bootloader has exited
+successfully and any pending kernel initialization has completed. Children do not
+compile, instantiate, or run during bootloader execution. Their reserved IDs
+can be woken or killed while pending. Boot failure discards pending children.
+
 ### `hal_kill_process(process_id) -> i32`
 
 Queues termination and returns `0` when accepted or `-1` when the request cannot be queued (including a nonpositive ID). It charges two fuel units. A process executing inside the kernel can finish that kernel call before termination is applied. The runtime's process manager caps pending kill requests.
@@ -90,6 +95,19 @@ Charges one fuel unit and returns `0` if the ID belongs to a current or queued p
 Only ordinary privileged processes receive this import; the kernel instance itself does not. The binary must be between 8 bytes and 1 MiB and accessible in the caller's memory. The request charges `8 + ceil(wasm_len / 16,384)` units, then delegates compilation, instantiation, and initialization to the computer runtime. Installation runs as maintenance work and can keep the installer suspended across ticks. The kernel is a passive instance, not a process; its syscall ABI is described in [kernel runtime](kernel-runtime.md).
 
 Returns `-3` for a binary length outside 8 bytes through 1 MiB, `-8` for an invalid input range, and `-9` if `memory` is missing. The computer returns `0` when installed, `-15` when installation cannot start because the kernel is not empty, and `-16` when compilation, linking, required exports, initialization, or compiler admission fails. Fuel charging can suspend and continue across turns; it does not return an out-of-fuel status. Kernel descriptor, initialization, retry, and failure behavior belongs to the kernel runtime contract.
+
+During bootloader execution, compilation, instantiation, required-export
+checks, and initial I/O descriptor validation finish before the call returns.
+Malformed images return `-16`, release their memory, and allow the bootloader
+to retry. Success returns `0` with the kernel installed; only `kernel_init`
+waits until the bootloader returns from `_start` and releases its memory.
+The installed kernel reserves its slot, so another installation returns `-15`.
+Syscalls return `-13` until initialization completes. Deferred initialization
+and descriptor revalidation finish before queued children start. Initialization
+failure reports diagnostics and fails boot, since the original caller has
+exited. A bootloader trap or termination discards initialization and releases
+the kernel. After boot, the install call also waits for initialization and
+returns its errors directly.
 
 ## Fuel and runtime limits
 

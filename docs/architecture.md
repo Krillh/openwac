@@ -37,6 +37,17 @@ The server tick calls `ComputerRuntime.tick()`. That method admits at most one i
 
 On first admitted tick, the VM selects the installed `BiosEeprom`, queues its bootloader as a privileged process, and enters `RUNNING`. `ProcessManager` creates processes through the `WasmComputer` lifecycle. Ordinary WASM processes are compiled and instantiated by `ChicoryEngine`, and their `_start` export must have type `() -> ()`. A passive kernel can be installed separately by firmware; it is owned by `ChicoryComputer`, has its own memory, and does not occupy a process slot.
 
+The bootloader runs alone until it exits successfully and releases its memory.
+Spawn requests made during boot reserve process IDs but defer compilation,
+instantiation, and execution. A kernel installation requested by the bootloader
+compiles, instantiates, and validates the kernel before returning. Invalid
+images return an error so the bootloader can retry. A successful call returns
+`0` with the kernel installed and `kernel_init` pending. After bootloader
+exit, metered maintenance calls `kernel_init` and revalidates its I/O descriptor
+before any queued process is created. A bootloader failure discards pending
+work and releases the installed kernel; a deferred initialization failure
+crashes boot and reports its diagnostics.
+
 `ProcessManager` owns machine-local process IDs, spawn/kill queues, ready and waiting queues, and lifecycle cleanup. Each tick it applies pending requests and schedules round-robin quanta within `fuelPerTick`; yields and exhausted quanta go to the queue tail. `ChicoryComputer` gives each process a 64-entry mailbox, separate from the VM's 1024-entry event hub.
 
 Closing or unloading the block entity closes its runtime. Close waits for an in-flight worker turn before releasing the machine slot and WASM instances. A server-wide active-machine semaphore allows 16 runtimes. The fixed worker pool has two threads and a queue of 16 tasks; a separate two-thread compiler pool has a queue of 16. Each computer admits one turn at a time. WASM processes are virtual threads, with a global semaphore limiting them to 128.
