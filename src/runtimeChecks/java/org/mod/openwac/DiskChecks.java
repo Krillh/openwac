@@ -35,6 +35,11 @@ final class DiskChecks {
             require(size == BLOCK_SIZE && count == BLOCK_COUNT, "Tier 1 geometry");
             require((long) BLOCK_SIZE * BLOCK_COUNT == 1024 * 1024, "Tier 1 capacity must be exactly 1 MiB");
             require(!Files.exists(directory), "Discovery and INFO must not allocate a disk image");
+            for (var device : List.of(disk, new DiskDevice(new MemoryBlockStorage(DISK_ID, BLOCK_SIZE, BLOCK_COUNT)))) {
+                require(call(device, 0x00, new byte[0], 1).code() == -2, "Retired root query must be unsupported");
+                require(call(device, 0x01, new byte[] {1}, 0).code() == -2, "Retired root update must be unsupported");
+            }
+            require(!Files.exists(directory), "Unsupported operations must not allocate storage");
             require(Arrays.equals(read(disk, 511, 1), new byte[BLOCK_SIZE]), "New disks must be zero initialized, including their last block");
             byte[] first = new byte[BLOCK_SIZE], last = new byte[BLOCK_SIZE];
             new Random(7).nextBytes(first); new Random(8).nextBytes(last);
@@ -88,10 +93,9 @@ final class DiskChecks {
             var media = repository.open(id, BLOCK_SIZE, BLOCK_COUNT);
             require(!repository.deleteIfZero(id, BLOCK_SIZE, BLOCK_COUNT) && !Files.exists(directory),
                     "Unused media and ejection must not allocate a backing directory or image");
-            media.setRoot(true);
+            media.read(0, 1, new byte[BLOCK_SIZE], 0);
             require(repository.deleteIfZero(id, BLOCK_SIZE, BLOCK_COUNT), "Blank payload must be reclaimed despite the nonzero header");
             require(!Files.exists(directory.resolve(id + ".disk")), "Ejected blank image must be absent");
-            require(Files.exists(directory.resolve(id + ".disk.root")) && media.isRoot(), "Root flag must survive blank reclamation and recreation");
             byte[] last = new byte[BLOCK_SIZE];
             last[BLOCK_SIZE - 1] = 7;
             media.write(BLOCK_COUNT - 1, 1, last, 0);
@@ -117,26 +121,28 @@ final class DiskChecks {
         var repository = new FileStorageRepository(directory);
         UUID deleted = new UUID(0, 30), retained = new UUID(0, 31);
         var media = repository.open(deleted, BLOCK_SIZE, BLOCK_COUNT);
-        media.setRoot(true);
+        byte[] contents = new byte[BLOCK_SIZE];
+        contents[0] = 1;
+        media.write(0, 1, contents, 0);
         var survivor = repository.open(retained, BLOCK_SIZE, BLOCK_COUNT);
-        survivor.setRoot(true);
+        survivor.write(0, 1, contents, 0);
         repository.delete(deleted);
-        require(!Files.exists(directory.resolve(deleted + ".disk"))
-                && !Files.exists(directory.resolve(deleted + ".disk.root")), "Disposal removes media and root metadata");
+        require(!Files.exists(directory.resolve(deleted + ".disk")), "Disposal removes the media image");
         repository.delete(deleted);
-        require(survivor.isRoot(), "Repeated disposal must preserve other disks");
-        require(!repository.open(deleted, BLOCK_SIZE, BLOCK_COUNT).isRoot(), "Recreated media must not inherit a deleted root flag");
+        byte[] readBack = new byte[BLOCK_SIZE];
+        survivor.read(0, 1, readBack, 0);
+        require(Arrays.equals(contents, readBack), "Repeated disposal must preserve other disks");
+        repository.open(deleted, BLOCK_SIZE, BLOCK_COUNT).read(0, 1, readBack, 0);
+        require(Arrays.equals(new byte[BLOCK_SIZE], readBack), "Recreated media must be blank");
         repository.delete(deleted);
         Path blockedImage = directory.resolve(deleted + ".disk");
-        Path metadata = directory.resolve(deleted + ".disk.root");
         Files.createDirectory(blockedImage);
         Files.write(blockedImage.resolve("blocker"), new byte[] {1});
-        Files.write(metadata, new byte[] {1});
         try {
             repository.delete(deleted);
             throw new AssertionError("Deletion failures must be reported");
         } catch (UncheckedIOException expected) {
-            require(!Files.exists(metadata), "Metadata deletion must still be attempted when image deletion fails");
+            require(Files.exists(blockedImage.resolve("blocker")), "Failed deletion must preserve the blocking entry");
         } finally {
             Files.delete(blockedImage.resolve("blocker"));
             Files.delete(blockedImage);

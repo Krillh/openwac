@@ -46,11 +46,13 @@ The computer inventory, machine ID, power state, peripheral links, and component
 
 | Data | World directory |
 | --- | --- |
-| Disk contents | `openwac/disks/` |
+| Disk contents | `openwac/disks/<uuid>.disk` |
 | Imported file snapshots and metadata | `openwac/imports/` |
 | Uploaded firmware images | `openwac/firmware/` |
 
 Stop the server before making a backup. Copy the complete world save, including its `openwac` directory. Restoring only the Minecraft region/player data can leave disks, imports, or custom firmware missing; restoring only `openwac` can leave inventory items without their associated data. Keep the world and `openwac` data from the same backup point.
+
+Disk roles are chosen by guest software. The mod no longer designates root disks. Older worlds may contain `<uuid>.disk.root` files; these are unused and can be deleted without affecting disk contents.
 
 Power off before removing a disk. Moving the same disk item between cases in the same world preserves its data. Empty backing files may be reclaimed on ejection. Permanent disposal, including creative deletion or `/clear`, can delete the backing files; the disposal code checks online inventories and nearby dropped items to avoid deleting ordinary transfers. Use world backups to preserve data you need.
 

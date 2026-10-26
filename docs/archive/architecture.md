@@ -437,9 +437,13 @@ Boot with BIOS and CPU but no RAM to check the missing-RAM diagnostic. Power off
 OpenWAC creative tab. Install it in the dedicated BIOS slot, with a CPU, RAM,
 and the boot media/peripherals required by the guest bootloader. Its built-in
 firmware reference `openwac:bootloader-v1` loads the exact bundled copy of
-`bootloader.wasm`; it never reads a development path at runtime. The
+the upstream bootloader artifact; it never reads a documentation path at runtime. The
 ordinary diagnostic BIOS remains available. Replacing the supplied binary
 requires updating `../../src/main/resources/data/openwac/firmware/bootloader-v1.wasm`.
+Bootloader source and builds belong in the separate OpenWACOS repository.
+Any bootloader binary retained in this archive is historical material, not a
+build or verification input. See the current [development guide](../development.md)
+for artifact integration and the stale verification-path dependency.
 
 `WasmComputer` is the loader-independent session boundary. The Chicory
 implementation owns one passive kernel instance, shared memory accounting,

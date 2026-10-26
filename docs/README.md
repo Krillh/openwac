@@ -33,6 +33,8 @@ and hardware support for guest scheduling are in scope here.
 
 The files in [archive](archive/) are retained as historical reference. Use these current pages for the consolidated documentation:
 
+Archived references to disk root flags, IS_ROOT/SET_ROOT operations, and `.disk.root` metadata describe a removed feature. See the current [disk interface](device-interfaces.md#0x0100-disk) for supported operations.
+
 | Archived file | Current coverage |
 |---|---|
 | [architecture.md](archive/architecture.md) | [Architecture](architecture.md), [User guide](user-guide.md), [Implementation gaps](implementation-gaps.md) |
@@ -48,4 +50,4 @@ The files in [archive](archive/) are retained as historical reference. Use these
 
 ## Firmware and diagnostics
 
-The [firmware directory](firmware/) contains working bundled firmware sources and diagnostic recipes. See [Development](development.md) for build inputs and [User guide](user-guide.md) for player-facing setup and recovery.
+The [firmware directory](firmware/) contains the mod's diagnostic firmware sources and diagnostic recipes. OpenWACOS bootloader source and builds belong in the separate OpenWACOS repository; the mod consumes its bundled resource, not a file under `docs/`. See [Development](development.md) for diagnostic build inputs, bundled artifact integration, and the current verification limitation, and [User guide](user-guide.md) for player-facing setup and recovery.

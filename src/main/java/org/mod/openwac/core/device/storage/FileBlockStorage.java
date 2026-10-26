@@ -30,31 +30,6 @@ public final class FileBlockStorage implements BlockStorage {
     @Override public int blockSize() { return blockSize; }
     @Override public long blockCount() { return blockCount; }
 
-    // Separate metadata preserves the existing version-1 media header and all guest bytes.
-    private Path rootFile() { return file.resolveSibling(file.getFileName() + ".root"); }
-    @Override public boolean isRoot() {
-        return access(channel -> {
-            if (!Files.exists(rootFile())) return 0;
-            try (FileChannel metadata = FileChannel.open(rootFile(), StandardOpenOption.READ)) {
-                if (metadata.size() != 1) throw new IOException("Invalid disk root metadata");
-                ByteBuffer flag = ByteBuffer.allocate(1);
-                readFully(metadata, flag, 0);
-                if (flag.array()[0] != 0 && flag.array()[0] != 1) throw new IOException("Invalid disk root flag");
-                return flag.array()[0];
-            }
-        }) == 1;
-    }
-    @Override public void setRoot(boolean root) {
-        access(channel -> {
-            try (FileChannel metadata = FileChannel.open(rootFile(), StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
-                writeFully(metadata, ByteBuffer.wrap(new byte[] {(byte) (root ? 1 : 0)}), 0);
-                metadata.truncate(1);
-                metadata.force(true);
-            }
-            return 0;
-        });
-    }
-
     @Override public int read(long first, int count, byte[] destination, int offset) {
         int length = transferLength(first, count, destination, offset);
         if (length <= 0) return length;
@@ -99,7 +74,7 @@ public final class FileBlockStorage implements BlockStorage {
             throw new UncheckedIOException(new IOException("Disk is busy", busy));
         } catch (IOException failure) { throw new UncheckedIOException(failure); }
     }
-    /** Remove an existing blank image without allocating media or discarding its root flag. */
+    /** Remove an existing blank image without allocating media. */
     public boolean deleteIfZero() {
         synchronized (mediaLock()) {
             if (!Files.exists(file)) return false;

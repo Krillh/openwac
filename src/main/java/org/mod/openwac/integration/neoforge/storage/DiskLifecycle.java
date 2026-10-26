@@ -76,7 +76,7 @@ public final class DiskLifecycle {
                 if (diskId(item.getItem()).filter(id::equals).isPresent()) return;
             }
             try { repository.delete(id); }
-            catch (UncheckedIOException failure) { LOGGER.error("Could not delete backing files for destroyed disk {}", id, failure); }
+            catch (UncheckedIOException failure) { LOGGER.error("Could not delete backing file for destroyed disk {}", id, failure); }
         });
     }
     public static void stop(MinecraftServer server) {

@@ -9,7 +9,7 @@ Each attached device has one UUID and one interface ID. Operation numbers are lo
 | Interface ID | Name | Device | Operations |
 | --- | --- | --- | --- |
 | `0x0001` | `openwac:eeprom` | BIOS EEPROM | `00` INFO, `01` READ |
-| `0x0100` | `openwac:disk` | Disk | `00` IS_ROOT, `01` SET_ROOT, `10` BLOCK_SIZE, `11` BLOCK_COUNT, `20` READ_BLOCK, `30` WRITE_BLOCK |
+| `0x0100` | `openwac:disk` | Disk | `10` BLOCK_SIZE, `11` BLOCK_COUNT, `20` READ_BLOCK, `30` WRITE_BLOCK |
 | `0x0200` | `openwac:file_importer` | File importer | `00` FILE_SIZE, `01` READ_BLOCK, `02` FILE_NAME, `03` FILE_NAME_LENGTH |
 | `0x0400` | `openwac:ttd` | Tiny Text Display | `00` GEOMETRY, `10` READ_CELLS, `20` WRITE_CELLS, `21` FILL, `22` COPY, `30` SET_CURSOR, `31` GET_CURSOR |
 | `0x0500` | `openwac:peripheral_port` | Peripheral port | `00` INFO |
@@ -52,14 +52,12 @@ The tier-one disk has 512 blocks of 2048 bytes. Block numbers are zero-based (`0
 
 | Op | Name | Arguments | Response |
 | --- | --- | --- | --- |
-| `0x00` | IS_ROOT | Empty | `is_root:u8` (`0` or `1`). |
-| `0x01` | SET_ROOT | At least `is_root:u8` (`0` or `1`); trailing bytes ignored | Empty. |
 | `0x10` | BLOCK_SIZE | Empty | `block_size:u32` (4 bytes). |
 | `0x11` | BLOCK_COUNT | Empty | `block_count:u32` (4 bytes). |
 | `0x20` | READ_BLOCK | `block:u32` (exactly 4 bytes) | One full block. |
 | `0x30` | WRITE_BLOCK | `block:u32`, then exactly one full block (2052 bytes for tier one) | Empty. |
 
-The root flag defaults false and is metadata independent of disk contents. IS_ROOT and geometry queries require empty arguments. Short SET_ROOT or transfer header returns `-4`; invalid root flag or unexpected query/read arguments returns `-3`. Unsupported op returns `-2`. Transfer block index is interpreted unsigned and checked before transfer payload/response length; invalid index returns `-10`. READ_BLOCK response capacity below block size returns `-5`. WRITE_BLOCK short data returns `-4`, oversized data `-3`. Short query response capacity returns `-5`. Failed media operations return `-6`. Successful writes complete their storage flush before returning; there is no FLUSH operation.
+Geometry queries require empty arguments. A short transfer header returns `-4`; unexpected query/read arguments return `-3`. Unsupported op returns `-2`, including the retired `0x00` and `0x01` root designation operations. Guest software chooses disk roles using its own policy or on-disk data. Transfer block index is interpreted unsigned and checked before transfer payload/response length; invalid index returns `-10`. READ_BLOCK response capacity below block size returns `-5`. WRITE_BLOCK short data returns `-4`, oversized data `-3`. Short query response capacity returns `-5`. Failed media operations return `-6`. Successful writes complete their storage flush before returning; there is no FLUSH operation.
 
 ## `0x0200` File importer
 

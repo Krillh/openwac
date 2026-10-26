@@ -73,7 +73,9 @@ World reload reconstructs hardware and cold-boots firmware when the saved power 
 
 `ComputerCaseBlockEntity` saves a version-3 record in block-entity data. It persists machine UUID, powered flag, short failure string, inventory item stacks, and up to 16 peripheral links (position plus pinned device UUID). The computer identity and hardware inventory survive reload; process IDs, running state, WASM memory, mailbox contents, and detailed crash reports do not. The BIOS slot is index 9, CPU slot 10, and four RAM slots are 11–14. Loading records older than version 2 moves a BIOS EEPROM from legacy component slots into slot 9 if that slot is empty.
 
-Component item stacks hold device UUIDs, preserving device identity when moved. Disk backing uses world-local `openwac/disks/<uuid>.disk` files (and `.root` metadata); firmware uploads use content-addressed SHA-256 blobs under `openwac/firmware`; importer uploads use immutable hash blobs and per-device `<uuid>.meta` selections under `openwac/imports`. Built-in firmware references resolve to bundled resources. These repositories persist media or artifacts, not a running computer image.
+Component item stacks hold device UUIDs, preserving device identity when moved. Disk backing uses world-local `openwac/disks/<uuid>.disk` files; firmware uploads use content-addressed SHA-256 blobs under `openwac/firmware`; importer uploads use immutable hash blobs and per-device `<uuid>.meta` selections under `openwac/imports`. Built-in firmware references resolve to bundled resources. These repositories persist media or artifacts, not a running computer image.
+
+Disks expose raw blocks and geometry. The host stores no root designation; guest firmware and operating systems choose disk roles. The version-1 disk image format is unchanged. Legacy `<uuid>.disk.root` sidecars are ignored and can be removed.
 
 ## Data path summary
 

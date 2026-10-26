@@ -15,23 +15,16 @@ public final class FileStorageRepository implements StorageRepository {
     @Override public BlockStorage open(UUID id, int blockSize, int blockCount) {
         return new FileBlockStorage(directory.resolve(Objects.requireNonNull(id) + ".disk"), id, blockSize, blockCount);
     }
-    /** Ejected blank disks need no image. Root metadata remains meaningful on blank media. */
+    /** Ejected blank disks need no image. */
     public boolean deleteIfZero(UUID id, int blockSize, int blockCount) {
         return new FileBlockStorage(directory.resolve(Objects.requireNonNull(id) + ".disk"), id, blockSize, blockCount).deleteIfZero();
     }
-    /** Permanent media disposal. Missing files are harmless; attempt both even if one fails. */
+    /** Permanent media disposal. A missing image is harmless. */
     public void delete(UUID id) {
-        String name = Objects.requireNonNull(id) + ".disk";
-        IOException failure = null;
-        for (String suffix : new String[] {"", ".root"}) {
-            Path file = directory.resolve(name + suffix);
-            try { Files.deleteIfExists(file); }
-            catch (IOException problem) {
-                var detail = new IOException("Could not delete disk backing file " + file, problem);
-                if (failure == null) failure = detail;
-                else failure.addSuppressed(detail);
-            }
+        Path file = directory.resolve(Objects.requireNonNull(id) + ".disk");
+        try { Files.deleteIfExists(file); }
+        catch (IOException failure) {
+            throw new UncheckedIOException("Could not delete disk backing file " + file, failure);
         }
-        if (failure != null) throw new UncheckedIOException(failure);
     }
 }

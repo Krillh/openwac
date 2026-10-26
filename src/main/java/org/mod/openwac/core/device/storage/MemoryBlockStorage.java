@@ -9,9 +9,6 @@ public final class MemoryBlockStorage implements BlockStorage {
     private final UUID id;
     private final int blockSize;
     private final byte[] data;
-    private boolean root;
-    @Override public synchronized boolean isRoot() { return root; }
-    @Override public synchronized void setRoot(boolean root) { this.root = root; }
     public MemoryBlockStorage(UUID id, int blockSize, int blockCount) {
         if (blockSize < 1 || blockCount < 1 || (long) blockSize * blockCount > MAX_CAPACITY) throw new IllegalArgumentException("Invalid media geometry");
         this.id = id; this.blockSize = blockSize; this.data = new byte[blockSize * blockCount];

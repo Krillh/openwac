@@ -33,6 +33,13 @@ and fuel accounting, Chicory memory/kernel behavior, device dispatch, TTD,
 metrics, firmware deduplication, continuations and preemption, hostile modules
 and pointers, cold boot, disk behavior, and the shipped disk self-test firmware.
 
+The full suite currently has a stale dependency: `KernelChecks.bootloader()`
+reads `docs/bootloader.wasm` before comparing it with the bundled resource.
+That documentation path is no longer a supported artifact location, so the
+full suite fails there in the current checkout. The check needs to validate
+the bundled resource directly; restoring a bootloader binary under `docs/`
+is not part of the setup. The focused checks above bypass that dependency.
+
 Manual play checks are still needed for Minecraft integration: case inventory
 and power flow, client screens and rendering, nearby chat and packet behavior,
 external peripheral discovery, chunk/world save and reload, and actual player
@@ -45,7 +52,7 @@ details.
 Diagnostic EEPROMs are development tools. Their release lifecycle is recorded
 in [confirmed product direction](implementation-gaps.md#confirmed-product-direction).
 
-The working firmware sources live in [firmware](firmware/). The default script
+The mod's diagnostic firmware sources live in [firmware](firmware/). The default script
 is `tools/build-firmware.ps1`; it invokes `clang` targeting
 `wasm32-unknown-unknown` with freestanding C flags and emits exactly four
 images into `src/main/resources/data/openwac/firmware/`:
@@ -64,9 +71,13 @@ resources are maintained separately from this four-image build. Runtime loading
 uses the bundled resources. After changing C firmware source, rebuild and review
 the resulting WASM resource as part of the same change.
 
-OpenWACOS bootloader, kernel, OS, and shell builds belong in their separate
-repository. Here, maintain the bundled artifact selection and integration;
-record the upstream version and artifact hash when updating them.
+OpenWACOS bootloader, kernel, OS, and shell source code and build instructions
+belong in their separate repository. The `docs/` directory is not a source or
+artifact location for the OpenWACOS bootloader. Here, maintain the bundled
+artifact selection and host integration. The bootloader EEPROM loads
+`src/main/resources/data/openwac/firmware/bootloader-v1.wasm`; update that
+resource from an upstream build and record the upstream version and artifact
+hash when replacing it.
 
 Keep guest entry and imports aligned with the runtime: guest programs export
 `_start: () -> ()`; automatic Wasm start sections are disabled. Pointer-based

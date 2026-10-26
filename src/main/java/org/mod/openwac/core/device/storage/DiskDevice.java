@@ -9,7 +9,7 @@ import java.util.*;
 /** Persistent disk wire contract, interface 0x0100. All values are response bytes, never statuses. */
 public final class DiskDevice implements Device {
     public static final InterfaceId INTERFACE = new InterfaceId(0x0100, "openwac:disk", 1, 0);
-    public static final int IS_ROOT = 0x00, SET_ROOT = 0x01, BLOCK_SIZE = 0x10,
+    public static final int BLOCK_SIZE = 0x10,
             BLOCK_COUNT = 0x11, READ_BLOCK = 0x20, WRITE_BLOCK = 0x30;
     private final BlockStorage media;
     public DiskDevice(BlockStorage media) { this.media = Objects.requireNonNull(media); }
@@ -25,17 +25,6 @@ public final class DiskDevice implements Device {
         byte[] args = call.arguments();
         try {
             return switch (call.operation()) {
-                case IS_ROOT -> {
-                    if (args.length != 0) yield DeviceResult.error(INVALID_ARGUMENT);
-                    if (call.responseLimit() < 1) yield DeviceResult.error(RESPONSE_OVERRUN);
-                    yield response(call, new byte[] {(byte) (media.isRoot() ? 1 : 0)});
-                }
-                case SET_ROOT -> {
-                    if (args.length == 0) yield DeviceResult.error(ARGUMENT_OVERRUN);
-                    if (args[0] != 0 && args[0] != 1) yield DeviceResult.error(INVALID_ARGUMENT);
-                    media.setRoot(args[0] == 1);
-                    yield DeviceResult.ok(new byte[0]);
-                }
                 case BLOCK_SIZE, BLOCK_COUNT -> args.length != 0 ? DeviceResult.error(INVALID_ARGUMENT)
                         : number(call, call.operation() == BLOCK_SIZE ? media.blockSize() : Math.toIntExact(media.blockCount()));
                 case READ_BLOCK, WRITE_BLOCK -> transfer(call, args);
