@@ -47,7 +47,8 @@ retries `-11` responses, preserving pending output. Start with a small file:
 printing a large or binary file can take a long time. The BIOS yields forever
 after its summary. Power-cycle to rerun it; upload again to test a changed file.
 
-The compiled image is bundled at
-`src/main/resources/data/openwac/firmware/importer-test-v1.wasm`. Rebuild both
+The compiled image lives at
+`bundled-data/firmware/importer-test-v1.wasm` and is packaged as
+`data/openwac/firmware/importer-test-v1.wasm`. Rebuild the
 diagnostic BIOS images with `tools/build-firmware.ps1 -Clang <clang-path>`.
 Only the compiled WASM image is loaded by Chicory.

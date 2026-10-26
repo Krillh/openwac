@@ -80,7 +80,8 @@ Source: [importer-ttd-test-v1.c](./importer-ttd-test-v1.c).
 ## Build
 
 `tools/build-firmware.ps1 -Clang <path-to-clang>` rebuilds all four C diagnostic
-images. These two use [ttd-firmware.h](./ttd-firmware.h) for shared HAL helpers.
+images under `bundled-data/firmware/`. These two use
+[ttd-firmware.h](./ttd-firmware.h) for shared HAL helpers.
 Compiled resources are `data/openwac/firmware/ttd-test-v1.wasm` and
 `data/openwac/firmware/importer-ttd-test-v1.wasm`. Each EEPROM references its
 bundled image rather than storing another copy of the binary in item data.

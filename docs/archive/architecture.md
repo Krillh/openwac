@@ -315,13 +315,13 @@ Block 511 is the persistent test marker. If blank, the firmware writes and flush
 
 Use a spare disk and keep the case powered until completion. The marker intentionally remains in block 511, and interruption or host I/O failure during the temporary write can leave test bytes in block 510. Successful runs restore block 510 exactly. The test does not format a filesystem or load a kernel; it yields in an idle loop after its final summary.
 
-The compiled `../../src/main/resources/data/openwac/firmware/disk-test-v1.wasm` is bundled, so running the mod does not require a compiler. To rebuild the firmware, run `tools/build-firmware.ps1 -Clang <path-to-clang>` with a Clang/LLD installation that supports `wasm32`. A direct PowerShell compiler invocation, which does not require enabling script execution, is:
+The compiled `../../bundled-data/firmware/disk-test-v1.wasm` is bundled, so running the mod does not require a compiler. To rebuild the firmware, run `tools/build-firmware.ps1 -Clang <path-to-clang>` with a Clang/LLD installation that supports `wasm32`. A direct PowerShell compiler invocation, which does not require enabling script execution, is:
 
 ```powershell
 & clang --target=wasm32-unknown-unknown -Oz -std=c11 -nostdlib -ffreestanding -fno-builtin `
     '-Wl,--no-entry' '-Wl,--export=_start' '-Wl,--allow-undefined' '-Wl,--strip-all' `
     '-Wl,--initial-memory=65536' '-Wl,--max-memory=65536' '-Wl,-z,stack-size=16384' `
-    docs/firmware/disk-test-v1.c -o src/main/resources/data/openwac/firmware/disk-test-v1.wasm
+    docs/firmware/disk-test-v1.c -o bundled-data/firmware/disk-test-v1.wasm
 ```
 
 `gradlew check` executes the actual bundled binary through Chicory and HAL against file-backed disks. It covers first-run markers, cold reload, multiple disks, occupied marker blocks, missing disks, unsupported geometry, chat retry, injected readback corruption, and scratch restoration on both success and failure.
@@ -439,7 +439,8 @@ and the boot media/peripherals required by the guest bootloader. Its built-in
 firmware reference `openwac:bootloader-v1` loads the exact bundled copy of
 the upstream bootloader artifact; it never reads a documentation path at runtime. The
 ordinary diagnostic BIOS remains available. Replacing the supplied binary
-requires updating `../../src/main/resources/data/openwac/firmware/bootloader-v1.wasm`.
+requires updating `../../bundled-data/firmware/bootloader-v1.wasm`, which Gradle
+packages as `data/openwac/firmware/bootloader-v1.wasm`.
 Bootloader source and builds belong in the separate OpenWACOS repository.
 Any bootloader binary retained in this archive is historical material, not a
 build or verification input. See the current [development guide](../development.md)

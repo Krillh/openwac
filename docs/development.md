@@ -54,7 +54,7 @@ in [confirmed product direction](implementation-gaps.md#confirmed-product-direct
 The mod's diagnostic firmware sources live in [firmware](firmware/). The default script
 is `tools/build-firmware.ps1`; it invokes `clang` targeting
 `wasm32-unknown-unknown` with freestanding C flags and emits exactly four
-images into `src/main/resources/data/openwac/firmware/`:
+images into `bundled-data/firmware/`:
 
 | Source | Bundled resource |
 | --- | --- |
@@ -73,10 +73,17 @@ the resulting WASM resource as part of the same change.
 OpenWACOS bootloader, kernel, OS, and shell source code and build instructions
 belong in their separate repository. The `docs/` directory is not a source or
 artifact location for the OpenWACOS bootloader. Here, maintain the bundled
-artifact selection and host integration. The bootloader EEPROM loads
-`src/main/resources/data/openwac/firmware/bootloader-v1.wasm`; update that
-resource from an upstream build and record the upstream version and artifact
+artifact selection and host integration. Update
+`bundled-data/firmware/bootloader-v1.wasm` from an upstream build and record the upstream version and artifact
 hash when replacing it.
+
+The top-level [bundled-data directory](../bundled-data/README.md) is the
+repository location for shipped firmware and future built-in floppy
+images. Gradle packages its `firmware/` and `floppies/` contents beneath
+`data/openwac/`, including development runs. The bootloader EEPROM uses
+`data/openwac/firmware/bootloader-v1.wasm` through its existing firmware
+reference. Put future built-in floppy images under `bundled-data/floppies/`;
+floppy support and OpenWACOS release images remain planned work.
 
 Keep guest entry and imports aligned with the runtime: guest programs export
 `_start: () -> ()`; automatic Wasm start sections are disabled. Pointer-based
