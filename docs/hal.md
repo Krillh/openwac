@@ -75,6 +75,11 @@ Charges one fuel unit. An unprivileged caller receives `-1` and continues. A pri
 
 Pass compiled Wasm bytes, not WAT text. A valid request allocates an ID and queues process creation; it does not mean compilation or startup succeeded, and the child is not run immediately. The process starts through the runtime's normal process entry point. The first function is available to privileged callers and creates an unprivileged process; the second creates a privileged process. Both binaries must be 8 bytes through 1 MiB and fit in caller memory. Charge is `8 + ceil(wasm_len / 16,384)` fuel units. Returns `0` for invalid size/range, process-limit exhaustion, or inability to queue; a positive value is the allocated process ID. Creation failures occur asynchronously and are reported by runtime lifecycle handling.
 
+A spawn requested during logical tick N cannot instantiate or execute before
+tick N+1. It becomes eligible at that boundary; CPU budget and boot restrictions
+can postpone its first turn further. This boundary is independent of the host's
+module parsing or compilation speed.
+
 During boot, both spawn operations queue work until the bootloader has exited
 successfully and any pending kernel initialization has completed. Children do not
 compile, instantiate, or run during bootloader execution. Their reserved IDs

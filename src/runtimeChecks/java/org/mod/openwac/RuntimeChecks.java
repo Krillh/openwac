@@ -45,6 +45,7 @@ public final class RuntimeChecks {
         }
         CrashChecks.run();
         roundRobinAndYield();
+        deferredProcessStart();
         tierOneCpuLimits();
         org.mod.openwac.runtime.chicory.MemoryChecks.run();
         org.mod.openwac.runtime.chicory.KernelChecks.reportChecks();
@@ -82,6 +83,38 @@ public final class RuntimeChecks {
             require(turns.equals(List.of("1:4", "2:4", "3:4", "1:1")), "Round robin must refund unused quantum and use the final partial quantum: " + turns);
             turns.clear(); manager.runTick(5, 4);
             require(turns.equals(List.of("2:4", "3:4")), "Next tick must retain the ready-queue cursor: " + turns);
+        }
+    }
+    private static void deferredProcessStart() {
+        List<Long> ran = new ArrayList<>();
+        List<Long> created = new ArrayList<>();
+        try (var manager = new ProcessManager(4)) {
+            ProcessFactory child = (id, wasm, privileged) -> {
+                created.add(id);
+                return new WasmProcess() {
+                    @Override public Step runQuantum(long fuel) { ran.add(id); return new Step(1, Reason.EXITED, null); }
+                    @Override public void wake() {}
+                    @Override public void close() {}
+                };
+            };
+            manager.spawnBoot(HEADER, (id, wasm, privileged) -> new WasmProcess() {
+                @Override public Step runQuantum(long fuel) {
+                    long first = manager.spawn(HEADER, false, child);
+                    long cancelled = manager.spawn(HEADER, true, child);
+                    require(first == 2 && cancelled == 3, "Deferred spawns retain allocated IDs");
+                    require(manager.wake(first), "A child may be woken before startup");
+                    require(manager.queueKill(cancelled), "A child may be killed before startup");
+                    return new Step(1, Reason.EXITED, null);
+                }
+                @Override public void wake() {}
+                @Override public void close() {}
+            });
+            manager.runTick(32, 8);
+            require(created.isEmpty() && ran.isEmpty(), "Children must not instantiate or run in the spawning tick");
+            require(manager.size() == 1, "Cancelled pending child must release its process slot");
+            manager.runTick(32, 8);
+            require(created.equals(List.of(2L)) && ran.equals(List.of(2L)), "Child must start on the next tick without an extra delay");
+            require(manager.size() == 0, "Child must finish normally");
         }
     }
     private static void tierOneCpuLimits() {

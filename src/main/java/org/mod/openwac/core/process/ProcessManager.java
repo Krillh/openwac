@@ -20,7 +20,7 @@ public final class ProcessManager implements AutoCloseable {
         default boolean hasWork() { return false; }
         default WasmProcess.Step maintenance(long fuel) { return new WasmProcess.Step(0, WasmProcess.Reason.EXITED, null); }
     }
-    private record Spawn(long id, byte[] wasm, boolean privileged, ProcessFactory factory) {}
+    private record Spawn(long id, byte[] wasm, boolean privileged, ProcessFactory factory, long eligibleTick) {}
     private final Map<Long, WasmProcess> processes = new LinkedHashMap<>();
     private final Map<Long, Boolean> privileges = new HashMap<>();
     private final Map<Long, WasmProcess.Reason> waiting = new HashMap<>();
@@ -31,6 +31,7 @@ public final class ProcessManager implements AutoCloseable {
     private final int limit;
     private long nextId = 1;
     private long bootId;
+    private long tick;
 
     public ProcessManager(int limit) {
         if (limit < 1 || limit > 256) throw new IllegalArgumentException("Invalid process limit");
@@ -48,7 +49,9 @@ public final class ProcessManager implements AutoCloseable {
         if (wasm == null || wasm.length < 8 || wasm.length > 1024 * 1024 || size() >= limit
                 || !lifecycle.canSpawn(pendingSpawns.size()) || nextId <= 0) return 0;
         long id = nextId++;
-        pendingSpawns.addLast(new Spawn(id, wasm.clone(), privileged, Objects.requireNonNull(factory)));
+        // A module requested during a turn cannot start until the following tick.
+        // Keep this boundary independent of how long parsing/compilation takes.
+        pendingSpawns.addLast(new Spawn(id, wasm.clone(), privileged, Objects.requireNonNull(factory), tick + 1));
         return id;
     }
     public boolean queueKill(long id) {
@@ -68,6 +71,7 @@ public final class ProcessManager implements AutoCloseable {
     private void applyPending(List<Failure> failures) {
         lifecycle.drainCommands();
         while (!pendingSpawns.isEmpty()
+                && pendingSpawns.getFirst().eligibleTick() <= tick
                 && (bootId != 0 ? pendingSpawns.getFirst().id() == bootId : lifecycle.canStartProcesses())) {
             Spawn request = pendingSpawns.removeFirst();
             if (pendingKills.remove(request.id())) {
@@ -106,6 +110,7 @@ public final class ProcessManager implements AutoCloseable {
     }
     public TickResult runTick(long totalFuel, long quantum) {
         if (totalFuel < 1 || quantum < 1) throw new IllegalArgumentException("Invalid fuel budget");
+        tick++;
         long remaining = totalFuel;
         int turns = 0;
         List<Failure> failures = new ArrayList<>();
